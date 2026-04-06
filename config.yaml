@@ -1,0 +1,57 @@
+# AutoApply Configuration
+# Edit this file to customize your job search
+
+search:
+  # Each query maps to which resume to use: "ml" or "pm"
+  queries:
+    - query: "Machine Learning Engineer"
+      resume_type: ml
+    - query: "AI Engineer"
+      resume_type: ml
+    - query: "Data Scientist"
+      resume_type: ml
+    - query: "Applied Scientist"
+      resume_type: ml
+    - query: "ML Engineer LLM"
+      resume_type: ml
+    - query: "Technical Product Manager AI"
+      resume_type: pm
+    - query: "Product Manager Machine Learning"
+      resume_type: pm
+
+  location: "United States"
+  remote_only: true          # only remote jobs
+  results_per_query: 20      # jobs to fetch per query per run
+  hours_old: 48              # only jobs posted in the last N hours
+
+filter:
+  # Jobs containing ANY of these words are skipped (case-insensitive)
+  exclude_keywords:
+    - "staff engineer"
+    - "principal engineer"
+    - "VP of"
+    - "Vice President"
+    - "C-suite"
+    - "security clearance required"
+    - "TS/SCI"
+    - "internship"
+    - "intern "
+  # Minimum job description length (filters out stub listings)
+  min_description_length: 300
+
+schedule:
+  interval_hours: 24         # re-runs once every day
+
+resumes:
+  ml: "Geoffrey_Munyaneza_ML_Resume_Final.docx"
+  pm: "Geoffrey_Munyaneza_PM_Resume.docx"
+
+output:
+  folder: "output"
+  tracker_file: "output/tracker_v2.xlsx"
+  resumes_folder: "output/resumes"
+
+# Claude model for resume tailoring
+claude:
+  model: "claude-haiku-4-5-20251001"  # fast + cheap for tailoring
+  max_tokens: 4096
