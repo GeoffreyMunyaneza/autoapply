@@ -78,14 +78,16 @@ def run_pipeline(config: dict, api_key: str) -> None:
         query = query_cfg["query"]
         configured_resume_type = query_cfg.get("resume_type", "ml")
 
-        logger.info(f"Searching: '{query}'")
+        sources = search_cfg.get("sources", ["linkedin", "indeed"])
+        logger.info(f"Searching: '{query}' across {len(sources)} sources: {', '.join(sources)}")
 
         jobs = scrape_jobs(
             query=query,
             location=search_cfg.get("location", "United States"),
-            results=search_cfg.get("results_per_query", 20),
-            hours_old=search_cfg.get("hours_old", 48),
+            results=search_cfg.get("results_per_query", 15),
+            hours_old=search_cfg.get("hours_old", 24),
             remote_only=search_cfg.get("remote_only", True),
+            sources=sources,
         )
 
         total_scraped += len(jobs)

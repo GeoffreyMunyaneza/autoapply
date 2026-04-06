@@ -1,5 +1,6 @@
 """
-scraper.py — Fetches job listings from LinkedIn and Indeed using python-jobspy.
+scraper.py — Fetches job listings from multiple sources using python-jobspy.
+Supported: linkedin, indeed, zip_recruiter, glassdoor, google
 """
 
 import logging
@@ -24,35 +25,59 @@ class Job:
     resume_type: str = "ml"  # "ml" or "pm"
 
 
-def scrape_jobs(query: str, location: str, results: int, hours_old: int, remote_only: bool) -> list[Job]:
-    """Scrape LinkedIn and Indeed for jobs matching the query."""
+def scrape_jobs(
+    query: str,
+    location: str,
+    results: int,
+    hours_old: int,
+    remote_only: bool,
+    sources: list[str] | None = None,
+) -> list[Job]:
+    """
+    Scrape multiple job boards for jobs matching the query.
+    sources: list of site names — linkedin, indeed, zip_recruiter, glassdoor, google
+    """
     try:
         from jobspy import scrape_jobs as _scrape
     except ImportError:
         logger.error("python-jobspy not installed. Run: pip install python-jobspy --no-deps")
         return []
 
-    jobs: list[Job] = []
+    if sources is None:
+        sources = ["linkedin", "indeed"]
 
-    try:
-        df = _scrape(
-            site_name=["linkedin", "indeed"],
-            search_term=query,
-            location=location,
-            results_wanted=results,
-            hours_old=hours_old,
-            country_indeed="USA",
-            linkedin_fetch_description=True,
-            is_remote=remote_only,
-            verbose=0,
-        )
-    except Exception as e:
-        logger.warning(f"Scrape failed for query '{query}': {e}")
+    # Scrape each source separately so one failure doesn't block others
+    all_dfs = []
+    for source in sources:
+        try:
+            df = _scrape(
+                site_name=[source],
+                search_term=query,
+                location=location,
+                results_wanted=results,
+                hours_old=hours_old,
+                country_indeed="USA",
+                linkedin_fetch_description=True,
+                is_remote=remote_only,
+                verbose=0,
+            )
+            if df is not None and not df.empty:
+                all_dfs.append(df)
+                logger.debug(f"    [{source}] {len(df)} results")
+        except Exception as e:
+            logger.warning(f"  [{source}] scrape failed for '{query}': {e}")
+            continue
+
+    if not all_dfs:
         return []
+
+    import pandas as pd
+    df = pd.concat(all_dfs, ignore_index=True)
 
     if df is None or df.empty:
         return []
 
+    jobs: list[Job] = []
     for _, row in df.iterrows():
         description = str(row.get("description") or "")
         if not description or description == "nan":

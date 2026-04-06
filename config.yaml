@@ -19,10 +19,18 @@ search:
     - query: "Product Manager Machine Learning"
       resume_type: pm
 
+  # Sources: linkedin, indeed, zip_recruiter, glassdoor, google
+  sources:
+    - linkedin
+    - indeed
+    - zip_recruiter
+    - glassdoor
+    - google
+
   location: "United States"
-  remote_only: true          # only remote jobs
-  results_per_query: 20      # jobs to fetch per query per run
-  hours_old: 48              # only jobs posted in the last N hours
+  remote_only: false          # only remote jobs
+  results_per_query: 15      # jobs to fetch per source per query
+  hours_old: 24              # only jobs posted in the last 24 hours (keeps results fresh)
 
 filter:
   # Jobs containing ANY of these words are skipped (case-insensitive)

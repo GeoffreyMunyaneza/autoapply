@@ -61,20 +61,103 @@ def _extract_paragraphs(doc: Document) -> list[tuple[int, str]]:
     return result
 
 
+def _run_format_key(run) -> tuple:
+    """Hashable key capturing a run's inline formatting."""
+    try:
+        color = str(run.font.color.rgb) if (run.font.color and run.font.color.type) else None
+    except Exception:
+        color = None
+    return (bool(run.bold), bool(run.italic), bool(run.underline), run.font.size, run.font.name, color)
+
+
 def _apply_changes(doc: Document, changes: dict[int, str]) -> Document:
-    """Apply text changes to a copy of the document, preserving formatting."""
+    """
+    Apply text changes to document paragraphs while preserving inline formatting.
+
+    Three strategies depending on run structure:
+    1. Single run → simple text replace (no formatting loss possible)
+    2. Multiple runs, all same format → collapse into first run (safe)
+    3. Multiple runs, mixed format (e.g. bold company name, normal text) →
+       distribute new text proportionally across runs by word boundary so
+       bold/italic/font changes stay roughly in the same positions.
+
+    Note: para.runs returns new objects on each access, so we snapshot once
+    and work with indices to avoid identity-comparison bugs.
+    """
     for para_idx, new_text in changes.items():
         if para_idx >= len(doc.paragraphs):
             continue
         para = doc.paragraphs[para_idx]
-        if not para.runs:
+
+        # Snapshot runs once — do NOT call para.runs again after this
+        all_runs = list(para.runs)
+        if not all_runs:
             continue
 
-        # Keep the first run's formatting, clear others
-        first_run = para.runs[0]
-        first_run.text = new_text
-        for run in para.runs[1:]:
-            run.text = ""
+        # Indices of runs that have actual content
+        content_indices = [i for i, r in enumerate(all_runs) if r.text.strip()]
+        if not content_indices:
+            content_indices = list(range(len(all_runs)))
+        if not content_indices:
+            continue
+
+        content_runs = [all_runs[i] for i in content_indices]
+
+        # ── Case 1: single content run ──────────────────────────────────────
+        if len(content_runs) == 1:
+            content_runs[0].text = new_text
+            for i, r in enumerate(all_runs):
+                if i not in content_indices:
+                    r.text = ""
+            continue
+
+        # ── Case 2: all content runs share identical formatting ─────────────
+        formats = [_run_format_key(r) for r in content_runs]
+        if len(set(formats)) == 1:
+            content_runs[0].text = new_text
+            for r in content_runs[1:]:
+                r.text = ""
+            for i, r in enumerate(all_runs):
+                if i not in content_indices:
+                    r.text = ""
+            continue
+
+        # ── Case 3: mixed inline formatting — distribute proportionally ─────
+        orig_total = sum(len(r.text) for r in content_runs)
+        if orig_total == 0:
+            content_runs[0].text = new_text
+            continue
+
+        proportions = [len(r.text) / orig_total for r in content_runs]
+        target_chars = [p * len(new_text) for p in proportions]
+
+        words = new_text.split()
+        distributed = [""] * len(content_runs)
+        word_cursor = 0
+
+        for i in range(len(content_runs) - 1):
+            target = target_chars[i]
+            chunk = ""
+            while word_cursor < len(words):
+                sep = " " if chunk else ""
+                candidate = chunk + sep + words[word_cursor]
+                # Stop adding words once we exceed target (unless chunk is still empty)
+                if len(candidate) > target and chunk:
+                    break
+                chunk = candidate
+                word_cursor += 1
+            distributed[i] = chunk
+
+        # Last run gets all remaining words
+        distributed[-1] = " ".join(words[word_cursor:])
+
+        for run, text in zip(content_runs, distributed):
+            run.text = text
+
+        # Clear non-content runs using the snapshotted index set
+        for i, r in enumerate(all_runs):
+            if i not in content_indices:
+                r.text = ""
 
     return doc
 
