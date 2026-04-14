@@ -1,0 +1,106 @@
+# questions.yaml — Pre-answered screening questions for AutoApply
+#
+# Pattern inspired by EasyApplyJobsBot / AIHawk.
+# These answers are used BEFORE calling Claude, so they are fast, free, and
+# consistent across every application.
+#
+# HOW IT WORKS:
+#   The submitter checks each ATS question text against the keys here
+#   (case-insensitive substring match). First match wins.
+#   Add your own entries — they override the built-in fallbacks.
+#
+# FORMAT:
+#   "question fragment": "answer"
+#
+# For radio/select questions the answer must exactly match one of the option labels.
+
+answers:
+  # ── Work authorization ──────────────────────────────────────────────────────
+  "authorized to work in the united states":    "Yes"
+  "authorized to work in the us":               "Yes"
+  "authorized to work in usa":                  "Yes"
+  "legally authorized to work":                 "Yes"
+  "eligible to work":                           "Yes"
+  "work authorization":                         "U.S. Citizen or Authorized to Work"
+  "sponsorship":                                "Yes"
+  "require visa sponsorship":                   "Yes"
+  "require sponsorship":                        "Yes"
+  "will you now or in the future require":      "Yes"
+  "need sponsorship":                           "Yes"
+  "opt":                                        "OPT (Optional Practical Training)"
+
+  # ── Experience & background ─────────────────────────────────────────────────
+  "years of experience":                        "4"
+  "years experience":                           "4"
+  "how many years":                             "4"
+  "highest level of education":                 "Master's Degree"
+  "highest education":                          "Master's Degree"
+  "degree":                                     "Master's Degree"
+  "bachelor or higher":                         "Yes"
+
+  # ── Salary & compensation ────────────────────────────────────────────────────
+  "expected salary":                            "130000"
+  "desired salary":                             "130000"
+  "salary expectation":                         "130000"
+  "salary requirements":                        "130000"
+  "desired compensation":                       "130000"
+  "what is your salary":                        "130000"
+  "minimum acceptable salary":                  "120000"
+  "annual salary":                              "130000"
+
+  # ── Availability & logistics ─────────────────────────────────────────────────
+  "available to start":                         "Within 2 weeks"
+  "start date":                                 "Within 2 weeks"
+  "when can you start":                         "Within 2 weeks"
+  "notice period":                              "2 weeks"
+  "willing to relocate":                        "Yes"
+  "open to relocation":                         "Yes"
+  "willing to travel":                          "Yes"
+  "travel requirement":                         "Up to 60%"
+  "work on-site":                               "Yes"
+  "work remotely":                              "Yes"
+  "remote work":                                "Yes"
+  "hybrid":                                     "Yes"
+
+  # ── EEO / voluntary self-identification ─────────────────────────────────────
+  # Update these with your own answers, or leave as "Prefer not to say" for privacy
+  "gender":                                     "Prefer not to say"
+  "race":                                       "Prefer not to say"
+  "ethnicity":                                  "Prefer not to say"
+  "veteran status":                             "I am not a protected veteran"
+  "protected veteran":                          "I am not a protected veteran"
+  "disability":                                 "I don't wish to answer"
+  "do you have a disability":                   "No, I don't have a disability"
+
+  # ── Profile / contact ────────────────────────────────────────────────────────
+  # Update these with your own details
+  "current company":                            "Your Current Employer"
+  "current employer":                           "Your Current Employer"
+  "current title":                              "Your Current Title"
+  "current job title":                          "Your Current Job Title"
+  "city":                                       "Your City"
+  "state":                                      "Your State"
+  "zip code":                                   "00000"
+  "country":                                    "United States"
+
+  # ── Role-specific ────────────────────────────────────────────────────────────
+  "programming language":                       "Python"
+  "primary programming language":               "Python"
+  "preferred language":                         "Python"
+  "machine learning framework":                 "PyTorch"
+  "deep learning framework":                    "PyTorch"
+  "ml framework":                               "PyTorch"
+  "cloud provider":                             "AWS"
+  "experience with python":                     "Yes"
+  "experience with pytorch":                    "Yes"
+  "experience with tensorflow":                 "Yes"
+  "experience with llm":                        "Yes"
+  "experience with nlp":                        "Yes"
+  "experience with computer vision":            "Yes"
+  "experience with aws":                        "Yes"
+  "cover letter":                               ""   # left blank — auto-generated cover letter is used
+
+  # ── LinkedIn-specific ────────────────────────────────────────────────────────
+  "how did you hear about":                     "LinkedIn"
+  "how did you find":                           "LinkedIn"
+  "referral":                                   "No"

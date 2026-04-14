@@ -14,7 +14,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from scraper import Job
+from core.scraper import Job
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +36,14 @@ COLUMNS = [
 ]
 
 STATUS_COLORS = {
-    "Discovered": "FFF9C4",   # yellow
-    "Queued":     "C8E6C9",   # green
-    "Applied":    "BBDEFB",   # blue
-    "Interviewing": "E1BEE7", # purple
-    "Offer":      "A5D6A7",   # bright green
-    "Rejected":   "FFCDD2",   # red
-    "Skipped":    "EEEEEE",   # grey
+    "Discovered":     "FFF9C4",   # yellow
+    "Pending Review": "FFE0B2",   # orange — awaiting your approval
+    "Queued":         "C8E6C9",   # green  — approved, ready to submit
+    "Applied":        "BBDEFB",   # blue
+    "Interviewing":   "E1BEE7",   # purple
+    "Offer":          "A5D6A7",   # bright green
+    "Rejected":       "FFCDD2",   # red
+    "Skipped":        "EEEEEE",   # grey
 }
 
 HEADER_FILL = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
@@ -108,6 +109,7 @@ def add_job(
     resume_type: str,
     resume_path: str = "",
     status: str = "Discovered",
+    notes: str = "",
 ) -> None:
     """Append a new job row to the tracker."""
     wb = _load_or_create(tracker_path)
@@ -130,7 +132,7 @@ def add_job(
         status,
         resume_path,
         datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "",  # Notes — user fills in
+        notes,
     ]
 
     color = STATUS_COLORS.get(status, "FFFFFF")

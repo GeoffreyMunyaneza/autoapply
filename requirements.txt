@@ -1,7 +1,31 @@
-python-jobspy
+# Core
 anthropic>=0.40.0
+apscheduler>=3.10.0
+customtkinter>=5.2.0
+pystray>=0.19.5
+Pillow>=10.0.0
 python-docx>=1.1.0
 openpyxl>=3.1.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
-schedule>=1.2.0
+
+# Job scraping
+python-jobspy
+pandas<3.0.0
+tls-client
+markdownify
+regex
+requests
+
+# Semantic matching
+sentence-transformers>=2.7.0
+torch>=2.0.0
+
+# Notifications
+plyer>=2.1.0
+
+# Browser automation (run `python -m playwright install chromium` after pip install)
+playwright>=1.44.0
+
+# Resume PDF conversion (requires Microsoft Word installed on Windows)
+docx2pdf>=0.1.8
