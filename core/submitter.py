@@ -39,6 +39,7 @@ from typing import Optional
 
 from core.scraper import Job
 from core.tracker import update_status
+from services.config import resolve_runtime_path
 
 logger = logging.getLogger(__name__)
 
@@ -208,36 +209,44 @@ _KNOWN_ANSWERS: dict[str, str] = {}  # question_key → answer cache
 
 # ── questions.yaml loader ──────────────────────────────────────────────────────
 
-_YAML_ANSWERS: dict[str, str] | None = None   # loaded once
+_YAML_ANSWERS: dict[str, str] | None = None
+_YAML_ANSWERS_SOURCE: str | None = None
 
 
 def _load_yaml_answers(questions_file: str = "questions.yaml") -> dict[str, str]:
     """
-    Load pre-answered questions from questions.yaml (singleton — loaded once).
+    Load pre-answered questions from questions.yaml.
     Returns a dict of {lowercase_question_fragment: answer}.
     """
-    global _YAML_ANSWERS
-    if _YAML_ANSWERS is not None:
+    global _YAML_ANSWERS, _YAML_ANSWERS_SOURCE
+
+    questions_path = resolve_runtime_path(questions_file)
+    source_key = str(questions_path)
+
+    if _YAML_ANSWERS is not None and _YAML_ANSWERS_SOURCE == source_key:
         return _YAML_ANSWERS
     try:
         import yaml
-        with open(questions_file, encoding="utf-8") as f:
+        with open(questions_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         raw = data.get("answers", {})
         _YAML_ANSWERS = {k.lower(): str(v) for k, v in raw.items()}
-        logger.info(f"Loaded {len(_YAML_ANSWERS)} pre-answered questions from {questions_file}")
+        _YAML_ANSWERS_SOURCE = source_key
+        logger.info(f"Loaded {len(_YAML_ANSWERS)} pre-answered questions from {questions_path}")
     except FileNotFoundError:
-        logger.debug(f"questions.yaml not found — using built-in answers only")
+        logger.debug(f"questions.yaml not found at {questions_path} — using built-in answers only")
         _YAML_ANSWERS = {}
+        _YAML_ANSWERS_SOURCE = source_key
     except Exception as e:
         logger.warning(f"Could not load questions.yaml: {e}")
         _YAML_ANSWERS = {}
+        _YAML_ANSWERS_SOURCE = source_key
     return _YAML_ANSWERS
 
 
 def _lookup_yaml(question_text: str) -> str | None:
     """Return a YAML-defined answer for question_text, or None if not found."""
-    answers = _load_yaml_answers()
+    answers = _YAML_ANSWERS if _YAML_ANSWERS is not None else _load_yaml_answers()
     q = question_text.lower()
     # Exact substring match — longest key wins to be more specific
     matches = [(k, v) for k, v in answers.items() if k in q]
@@ -327,7 +336,7 @@ def _answer_question(
         auth  = profile.get("work_authorization", "authorized to work")
         sponsorship = "requires visa sponsorship" if profile.get("requires_sponsorship") else "no sponsorship needed"
         result = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-3-5-haiku-20241022",
             max_tokens=100,
             system=(
                 f"You are filling out a job application for {name} "
@@ -348,7 +357,7 @@ def _answer_question(
 
 # ── LinkedIn Easy Apply ────────────────────────────────────────────────────────
 
-_LINKEDIN_COOKIES_FILE = Path(".linkedin_session.json")
+_LINKEDIN_COOKIES_FILE = resolve_runtime_path(".linkedin_session.json", for_write=True)
 
 
 def _linkedin_save_cookies(context) -> None:
@@ -635,17 +644,14 @@ def _submit_linkedin(
         )
         if submit_btn and submit_btn.is_visible():
             if review_mode:
-                logger.info("  Form filled — browser open for your review.")
-                try:
-                    input("  >> Press Enter to submit, or Ctrl+C to cancel: ")
-                    submit_btn.click()
-                    page.wait_for_load_state("networkidle", timeout=15_000)
+                logger.info(
+                    f"  [LinkedIn] Form filled — click 'Submit application' in the browser window."
+                )
+                submitted = _wait_for_user_submit(page)
+                if submitted:
                     logger.info(f"  Submitted: {job.title} @ {job.company}")
                     _linkedin_save_cookies(context)
-                    return True
-                except KeyboardInterrupt:
-                    logger.info("  Submission cancelled.")
-                    return False
+                return submitted
             else:
                 submit_btn.click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
@@ -1169,14 +1175,13 @@ def _submit_indeed(page, job: "Job", resume_path: str, profile: dict,
         )
         if submit_btn and submit_btn.is_visible():
             if review_mode:
-                logger.info("  Indeed form filled — browser open for review.")
-                try:
-                    input("  >> Press Enter to submit, or Ctrl+C to cancel: ")
-                    submit_btn.click()
-                    page.wait_for_load_state("networkidle", timeout=15_000)
-                    return True
-                except KeyboardInterrupt:
-                    return False
+                logger.info(
+                    f"  [Indeed] Form filled — click 'Submit my application' in the browser."
+                )
+                submitted = _wait_for_user_submit(page)
+                if submitted:
+                    logger.info(f"  Submitted: {job.title} @ {job.company}")
+                return submitted
             else:
                 submit_btn.click()
                 page.wait_for_load_state("networkidle", timeout=15_000)
@@ -1333,11 +1338,10 @@ def _submit_wellfound(page, job: "Job", resume_path: str, profile: dict,
     _human_delay(500, 800)
 
     if review_mode:
-        logger.info("  Wellfound form filled — browser open for review.")
-        try:
-            input("  >> Press Enter to submit, or Ctrl+C to cancel: ")
-        except KeyboardInterrupt:
-            return False
+        logger.info(
+            f"  [Wellfound] Form filled — click Submit in the browser window."
+        )
+        return _wait_for_user_submit(page)
 
     return True
 
@@ -1393,6 +1397,81 @@ def _fill_work_auth(page, profile: dict) -> None:
                     break
         except Exception:
             pass
+
+
+# ── Handoff wait (Tsenta model) ────────────────────────────────────────────────
+
+_SUCCESS_SELECTORS = [
+    "[class*='success'][class*='message']",
+    "[class*='confirmation-message']",
+    "[class*='application-submitted']",
+    "[data-test*='success']",
+    "[aria-label*='submitted']",
+    ".jobs-post-apply-confirmation",   # LinkedIn post-submit
+]
+
+_SUCCESS_TEXT_FRAGMENTS = [
+    "application submitted",
+    "application received",
+    "thank you for applying",
+    "successfully submitted",
+    "we've received your application",
+    "your application has been",
+    "you have applied",
+]
+
+
+def _wait_for_user_submit(page, timeout_ms: int = 600_000) -> bool:
+    """
+    Bring the browser window to the foreground and wait for the user to click Submit.
+
+    Returns True when submission is detected (URL change or success message).
+    Returns False on timeout (10 minutes by default) without submission.
+
+    This implements the Tsenta-style workflow: AutoApply fills the form automatically,
+    the user reviews it in the visible browser window and clicks Submit themselves.
+    The calling thread blocks here — call from a background thread only.
+    """
+    try:
+        page.bring_to_front()
+    except Exception:
+        pass
+
+    initial_url = page.url
+    deadline = time.time() + timeout_ms / 1000
+
+    while time.time() < deadline:
+        try:
+            # URL changed → user navigated (submitted or moved to next step/confirmation)
+            if page.url != initial_url:
+                time.sleep(1.5)  # let confirmation page load
+                return True
+
+            # Check for visible success/confirmation elements
+            for sel in _SUCCESS_SELECTORS:
+                try:
+                    el = page.query_selector(sel)
+                    if el and el.is_visible():
+                        return True
+                except Exception:
+                    pass
+
+            # Check page text for common confirmation phrases
+            try:
+                body_text = page.evaluate("document.body.innerText").lower()[:3000]
+                if any(t in body_text for t in _SUCCESS_TEXT_FRAGMENTS):
+                    return True
+            except Exception:
+                pass
+
+        except Exception:
+            # Browser closed or page crashed — treat as "done"
+            return True
+
+        time.sleep(1)
+
+    logger.warning("  Handoff timeout (10 min) — no submission detected.")
+    return False
 
 
 # ── Screenshot on failure ──────────────────────────────────────────────────────
@@ -1504,32 +1583,19 @@ def submit_application(
                 update_status(tracker_path, job.id, "Applied")
             return success
 
-        # For form-fill-only ATS: show browser for review or auto-click submit
+        # For form-fill-only ATS: hand off to user (review_mode) or auto-click (auto_submit)
         if ats not in _self_submitting:
             if review_mode:
-                logger.info("  Form filled — browser open for review. Press Enter to submit.")
-                try:
-                    input("  >> Press Enter to submit, or Ctrl+C to skip: ")
-                    submit_btn = page.query_selector(
-                        "button[type='submit'], input[type='submit'], "
-                        "button:has-text('Submit'), button:has-text('Apply')"
-                    )
-                    if submit_btn and submit_btn.is_visible():
-                        submit_btn.click()
-                        page.wait_for_load_state("networkidle", timeout=15_000)
-                        logger.info(f"  Submitted: {job.title} @ {job.company}")
-                        if tracker_path:
-                            update_status(tracker_path, job.id, "Applied")
-                        return True
-                    else:
-                        logger.warning("  Submit button not found — please submit manually.")
-                        input("  >> Press Enter when done: ")
-                        if tracker_path:
-                            update_status(tracker_path, job.id, "Applied")
-                        return True
-                except KeyboardInterrupt:
-                    logger.info("  Application cancelled.")
-                    return False
+                logger.info(
+                    f"  Form filled — review in browser and click Submit."
+                    f"  ({job.title} @ {job.company})"
+                )
+                submitted = _wait_for_user_submit(page)
+                if submitted:
+                    logger.info(f"  Submitted: {job.title} @ {job.company}")
+                    if tracker_path:
+                        update_status(tracker_path, job.id, "Applied")
+                return submitted
             else:
                 _human_delay(800, 1500)
                 submit_btn = page.query_selector(

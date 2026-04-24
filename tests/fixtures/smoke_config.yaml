@@ -1,0 +1,46 @@
+user_profile: {}
+
+search:
+  queries: []
+  sources:
+    - linkedin
+  location: "United States"
+  remote_only: false
+  results_per_query: 5
+  hours_old: 24
+
+filter:
+  exclude_keywords: []
+  min_description_length: 0
+
+resumes: {}
+
+output:
+  tracker_file: "output/test_smoke_tracker.xlsx"
+  resumes_folder: "output/test_smoke_resumes"
+  pending_folder: "output/test_smoke_pending"
+
+claude:
+  model: "claude-3-5-haiku-20241022"
+  max_tokens: 1024
+
+cover_letter:
+  auto_generate: false
+
+review:
+  auto_approve: true
+
+notifications:
+  windows_toast: false
+  email:
+    enabled: false
+
+screening:
+  questions_file: "questions.yaml"
+
+submission:
+  enabled: false
+  headless: false
+  review_before_submit: true
+  screenshots_folder: "output/test_smoke_screenshots"
+  profile: {}

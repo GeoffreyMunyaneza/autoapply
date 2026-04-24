@@ -1,44 +1,18 @@
-# AutoApply Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-# Sensitive values (email, passwords, phone, API keys) live in .env — NOT here.
-# See .env.example for the full list of environment variables.
-# ─────────────────────────────────────────────────────────────────────────────
+# AutoApply configuration
+# Secrets belong in .env, not here.
 
-# ── Automation Schedule ───────────────────────────────────────────────────────
-# Set enabled: true to run the pipeline automatically in the background.
-# cron: standard 5-field syntax — minute hour day-of-month month day-of-week
-# auto_submit: true will ALSO submit all Queued jobs after each run (fully hands-off).
-schedule:
-  enabled: false                 # flip to true to enable background automation
-  cron: "0 */4 * * *"           # every 4 hours  |  "0 8 * * *" = daily at 8 AM
-  auto_submit: false             # true = fully automated: scrape → tailor → submit
-
-# ── User Profile ──────────────────────────────────────────────────────────────
-# Used by Claude for resume tailoring, cover letters, and screening questions.
-# Fill this in with YOUR background. Be specific — the more detail, the better
-# the AI tailoring quality.
 user_profile:
   name: "Your Name"
-
-  # Professional background paragraph fed to Claude on every tailoring call.
-  # Include: title, years of experience, key skills, notable employers, education,
-  # work authorization status, and location.
   background: |
     [Your title] with [X]+ years of [your domain] experience.
     Key strengths: [skill1], [skill2], [skill3].
-    Previous roles: [Company 1 — role], [Company 2 — role].
+    Previous roles: [Company 1 - role], [Company 2 - role].
     Education: [Degree] from [School]; [Degree] from [School].
-    Work authorization: [e.g. OPT / H1B / EAD / US Citizen / Green Card].
+    Work authorization: [OPT / H1B / EAD / US Citizen / Green Card].
     Location: [City, State].
-
-  # Extra keywords that give a bonus match score when found in job descriptions.
-  # Add niche skills, certifications, or tools unique to your background.
   differentiator_keywords:
     - "your unique keyword 1"
     - "your unique keyword 2"
-
-  # Semantic matching profiles (sentence-transformers cosine similarity).
-  # Describe what the ideal ML and PM job looks like for someone with your background.
   ml_match_profile: >
     Machine learning engineer with experience in deep learning, computer vision, NLP,
     LLMs, PyTorch, TensorFlow, MLOps, model deployment, and generative AI.
@@ -48,9 +22,6 @@ user_profile:
     stakeholder management, agile, go-to-market, and cross-functional leadership.
     Looking for Senior Product Manager or Technical PM roles in AI/ML.
 
-# ── Search ────────────────────────────────────────────────────────────────────
-# Add or remove queries. Each query runs across all enabled sources.
-# resume_type: "ml" uses resumes.ml; "pm" uses resumes.pm
 search:
   queries:
     - query: "Machine Learning Engineer"
@@ -67,25 +38,20 @@ search:
       resume_type: pm
     - query: "Product Manager Machine Learning"
       resume_type: pm
-
-  # Supported: linkedin, indeed, zip_recruiter, glassdoor, google, bayt, naukri, bdjobs
   sources:
     - linkedin
     - indeed
     - zip_recruiter
-    #- glassdoor
     - google
-
   location: "United States"
   remote_only: false
   results_per_query: 15
   hours_old: 24
-  job_type: fulltime          # fulltime | parttime | internship | contract
+  job_type: fulltime
   distance_miles: 50
   easy_apply_only: false
   proxies: []
 
-# ── Filters ───────────────────────────────────────────────────────────────────
 filter:
   exclude_keywords:
     - "staff engineer"
@@ -99,52 +65,46 @@ filter:
     - "intern "
   min_description_length: 300
 
-# ── Resumes ───────────────────────────────────────────────────────────────────
-# File paths relative to the project root. Place your .docx files here.
 resumes:
-  ml: "Your_ML_Resume.docx"       # used for ML / AI / Data Science roles
-  pm: "Your_PM_Resume.docx"       # used for Product Manager roles
+  ml: "Your_ML_Resume.docx"
+  pm: "Your_PM_Resume.docx"
 
-# ── Output ────────────────────────────────────────────────────────────────────
 output:
-  tracker_file:   "output/tracker_v2.xlsx"
+  tracker_file: "output/tracker_v2.xlsx"
   resumes_folder: "output/resumes"
+  pending_folder: "output/pending"
 
-# ── Claude / AI ───────────────────────────────────────────────────────────────
 claude:
-  model: "claude-haiku-4-5-20251001"   # haiku = fast + cheap; sonnet = higher quality
+  model: "claude-3-5-haiku-20241022"
   max_tokens: 4096
 
 cover_letter:
-  auto_generate: true   # Claude writes a tailored 3-paragraph cover letter per job
+  auto_generate: true
 
-# ── Notifications ─────────────────────────────────────────────────────────────
+review:
+  auto_approve: true
+
 notifications:
   windows_toast: true
   email:
     enabled: false
     smtp_host: "smtp.gmail.com"
     smtp_port: 587
-    # from_address, to_address, password → set in .env as SMTP_FROM / SMTP_TO / SMTP_PASSWORD
 
-# ── Screening Questions ───────────────────────────────────────────────────────
 screening:
   questions_file: "questions.yaml"
 
-# ── Auto-Submission ───────────────────────────────────────────────────────────
 submission:
-  enabled: false               # set true to activate Playwright auto-submit
-  headless: false              # false = browser visible (recommended for CAPTCHA handling)
-  review_before_submit: false
+  enabled: false
+  headless: false
+  review_before_submit: true
   screenshots_folder: "output/screenshots"
-  # linkedin.email, linkedin.password → set in .env as LINKEDIN_EMAIL / LINKEDIN_PASSWORD
   profile:
     first_name: "Your"
-    last_name:  "Name"
-    linkedin:   "https://www.linkedin.com/in/yourprofile"
-    github:     ""
-    portfolio:  ""
-    current_company:      "Your Current Employer"
-    work_authorization:   "US Citizen"  # OPT / H1B / EAD / Green Card / US Citizen
+    last_name: "Name"
+    linkedin: "https://www.linkedin.com/in/yourprofile"
+    github: ""
+    portfolio: ""
+    current_company: "Your Current Employer"
+    work_authorization: "US Citizen"
     requires_sponsorship: false
-    # email, phone → set in .env as PROFILE_EMAIL / PROFILE_PHONE

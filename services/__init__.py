@@ -1,2 +1,1 @@
-# services — orchestration layer
-# config · pipeline · scheduler
+# Service layer package.

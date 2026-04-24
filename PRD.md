@@ -48,21 +48,21 @@ This document breaks down all tasks, requirements, and implementation approach d
   - Color-code rows by status
   - Clickable hyperlinks for job URL and resume path
 
-- [x] **Orchestrator + scheduler (`main.py`)**
+- [x] **Orchestrator (`main.py`)**
   - Run full pipeline: scrape → filter → tailor → track
   - Skip jobs already in tracker (deduplication by ID)
-  - Schedule daily runs via Python `schedule` library
+  - Support manual runs from the CLI and desktop app
   - Log all activity to `output/autoapply.log`
 
-- [x] **Daily automation**
-  - Windows Task Scheduler task (runs at 8 AM daily)
-  - `start.bat` for manual one-click launch
+- [x] **Manual automation**
+  - `app.py --run` for one-click desktop execution
+  - `main.py` for one-off CLI execution
 
 - [x] **Configuration (`config.yaml`)**
   - Search queries with resume type mapping
   - Location, remote-only toggle, results per query, hours old
   - Exclude keyword list
-  - Schedule interval
+  - Resume review mode
   - Claude model selection
 
 ### Requirements to Meet
@@ -185,10 +185,10 @@ This document breaks down all tasks, requirements, and implementation approach d
 
 | Requirement | Approach |
 |---|---|
-| Runs locally on Windows (Phase 1–2) | Python + Windows Task Scheduler; no server needed |
+| Runs locally on Windows (Phase 1-2) | Python desktop app + CLI; no server needed |
 | No ATS bans | Rate limiting + respectful polling intervals |
 | Secrets never exposed | `.env` + `.gitignore`; no hardcoded keys anywhere |
 | Resilient to file locks | PermissionError fallback with versioned filenames |
 | Logs for debugging | Rotating log file at `output/autoapply.log` |
 | Reproducible setup | `requirements.txt` + conda env + README setup steps |
-| Works after laptop restart | Task Scheduler persists across reboots |
+| Works after laptop restart | Config and output stay local; app can be relaunched manually |

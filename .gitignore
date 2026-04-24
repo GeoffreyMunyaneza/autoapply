@@ -4,6 +4,8 @@
 
 # Output (generated files)
 output/
+build/
+dist/
 
 # Personal resumes (keep off public repo)
 *.docx
@@ -17,3 +19,6 @@ __pycache__/
 # Windows
 Thumbs.db
 desktop.ini
+
+# Local editor settings
+.vscode/

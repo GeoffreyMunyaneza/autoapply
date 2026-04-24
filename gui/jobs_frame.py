@@ -186,6 +186,10 @@ class JobsFrame(ctk.CTkFrame):
         self._all_rows = _load_rows(self._tracker_path)
         self._apply_filters()
 
+    def set_tracker_path(self, tracker_path: str) -> None:
+        self._tracker_path = tracker_path
+        self.refresh()
+
     # ── Filtering + sorting ───────────────────────────────────────────────────
 
     def _apply_filters(self) -> None:

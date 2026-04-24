@@ -2,7 +2,6 @@
 ## Inspired by Tsenta.com · Phase 3
 
 **Date:** 2026-04-14  
-**Author:** Geoffrey Munyaneza  
 **Status:** In Progress
 
 ---
@@ -40,9 +39,9 @@ Their live-browser visualization and dashboard are the product, not just the aut
 
 ## 3. Target User
 
-Geoffrey Munyaneza — graduating MBA, ML Engineer, running this tool locally on Windows 11
-during active job search (May 2026 graduation). Needs something that runs quietly in the
-background, alerts on new matches, and lets him review/submit from a clean UI.
+A technical job seeker running AutoApply locally on Windows 11 during an active job search.
+Needs something that runs quietly in the background, alerts on new matches, and allows
+reviewing and submitting applications from a clean UI without touching a terminal.
 
 ---
 

@@ -21,17 +21,27 @@ import re
 import shutil
 from datetime import date
 from pathlib import Path
-
-import anthropic
-from docx import Document
+from typing import Any
 
 from core.scraper import Job
 
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
+try:
+    from docx import Document
+except ImportError:
+    Document = None
+
 # ── Cached Anthropic client (created once per process) ────────────────────────
-_client: anthropic.Anthropic | None = None
+_client: Any | None = None
 
 
-def _get_client(api_key: str) -> anthropic.Anthropic:
+def _get_client(api_key: str):
+    if anthropic is None:
+        raise RuntimeError("anthropic package not installed â€” run: pip install anthropic")
     global _client
     if _client is None:
         _client = anthropic.Anthropic(api_key=api_key)
@@ -238,7 +248,7 @@ def generate_cover_letter(
     try:
         client = _get_client(api_key)
         message = client.messages.create(
-            model=claude_config.get("model", "claude-haiku-4-5-20251001"),
+            model=claude_config.get("model", "claude-3-5-haiku-20241022"),
             max_tokens=500,
             system=_build_cover_prompt(user_profile or {}),
             messages=[{
@@ -292,15 +302,23 @@ def tailor_resume(
         logger.error(f"Base resume not found: {base_resume_path}")
         return None, cover_letter
 
-    # Build output path — pending folder if review required
+    # Build output paths — changed resumes can go to pending/, unchanged fallbacks go to final output.
     safe_company = re.sub(r'[^\w\s-]', '', job.company).strip().replace(' ', '_')[:30]
     safe_title = re.sub(r'[^\w\s-]', '', job.title).strip().replace(' ', '_')[:30]
     today = date.today().strftime("%Y%m%d")
     output_filename = f"{safe_company}_{safe_title}_{resume_type.upper()}_{today}.docx"
 
-    dest_folder = Path(pending_folder) if (not auto_approve and pending_folder) else Path(output_folder)
-    dest_folder.mkdir(parents=True, exist_ok=True)
-    output_path = dest_folder / output_filename
+    final_folder = Path(output_folder)
+    review_folder = Path(pending_folder) if (not auto_approve and pending_folder) else final_folder
+    final_folder.mkdir(parents=True, exist_ok=True)
+    review_folder.mkdir(parents=True, exist_ok=True)
+    final_output_path = final_folder / output_filename
+    review_output_path = review_folder / output_filename
+
+    if Document is None:
+        logger.error("python-docx not installed â€” saving unmodified resume instead")
+        shutil.copy2(str(base_resume_path), str(final_output_path))
+        return str(final_output_path), cover_letter
 
     # Load the base resume
     doc = Document(str(base_resume_path))
@@ -333,7 +351,7 @@ Return {{}} if the resume is already well-suited. Do not include any explanation
     try:
         client = _get_client(api_key)
         message = client.messages.create(
-            model=claude_config.get("model", "claude-haiku-4-5-20251001"),
+            model=claude_config.get("model", "claude-3-5-haiku-20241022"),
             max_tokens=claude_config.get("max_tokens", 4096),
             system=_build_resume_prompt(user_profile or {}),
             messages=[{"role": "user", "content": user_message}],
@@ -341,10 +359,10 @@ Return {{}} if the resume is already well-suited. Do not include any explanation
         response_text = message.content[0].text.strip()
     except Exception as e:
         logger.error(f"Claude API call failed for {job.company} / {job.title}: {e}")
-        # Fall back: save unchanged resume
-        shutil.copy2(str(base_resume_path), str(output_path))
-        logger.info(f"  Saved unmodified resume to {output_path}")
-        return str(output_path), cover_letter
+        # Fall back: save unchanged resume directly to final output.
+        shutil.copy2(str(base_resume_path), str(final_output_path))
+        logger.info(f"  Saved unmodified resume to {final_output_path}")
+        return str(final_output_path), cover_letter
 
     # Parse JSON response
     try:
@@ -354,20 +372,18 @@ Return {{}} if the resume is already well-suited. Do not include any explanation
         changes = {int(k): v for k, v in changes_raw.items()}
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Could not parse Claude response as JSON: {e}. Saving unmodified resume.")
-        shutil.copy2(str(base_resume_path), str(output_path))
-        return str(output_path), cover_letter
+        shutil.copy2(str(base_resume_path), str(final_output_path))
+        return str(final_output_path), cover_letter
 
     if not changes:
         # No changes needed — just copy to final output (no review needed for unchanged resumes)
-        final_path = Path(output_folder) / output_filename
-        final_path.parent.mkdir(parents=True, exist_ok=True)
-        save_path = final_path
+        save_path = final_output_path
         for attempt in range(5):
             try:
                 shutil.copy2(str(base_resume_path), str(save_path))
                 break
             except PermissionError:
-                save_path = final_path.with_name(f"{final_path.stem}_{attempt + 1}.docx")
+                save_path = final_output_path.with_name(f"{final_output_path.stem}_{attempt + 1}.docx")
         logger.info(f"  No tailoring needed — saved copy to {save_path.name}")
         return str(save_path), cover_letter
 
@@ -376,14 +392,14 @@ Return {{}} if the resume is already well-suited. Do not include any explanation
     doc_copy = _apply_changes(doc_copy, changes)
 
     # If file is locked (e.g. open in Word), append a counter to the name
-    save_path = output_path
+    save_path = review_output_path
     for attempt in range(5):
         try:
             doc_copy.save(str(save_path))
             break
         except PermissionError:
-            stem = output_path.stem
-            save_path = output_path.with_name(f"{stem}_{attempt + 1}.docx")
+            stem = review_output_path.stem
+            save_path = review_output_path.with_name(f"{stem}_{attempt + 1}.docx")
     else:
         logger.warning(f"  Could not save tailored resume (file locked): {output_filename}")
         return None, cover_letter

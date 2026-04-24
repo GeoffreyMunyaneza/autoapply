@@ -6,17 +6,29 @@ Columns:
   Match Score | Resume Type | Status | Resume Path | Date Added | Notes
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
 from pathlib import Path
 
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-
 from core.scraper import Job
 
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    openpyxl = None
+    Font = PatternFill = Alignment = None
+    get_column_letter = None
+
 logger = logging.getLogger(__name__)
+
+
+def _require_openpyxl() -> None:
+    if openpyxl is None:
+        raise RuntimeError("openpyxl not installed — run: pip install openpyxl")
 
 COLUMNS = [
     "ID",
@@ -46,11 +58,16 @@ STATUS_COLORS = {
     "Skipped":        "EEEEEE",   # grey
 }
 
-HEADER_FILL = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
-HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
+if PatternFill and Font:
+    HEADER_FILL = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+    HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
+else:
+    HEADER_FILL = None
+    HEADER_FONT = None
 
 
 def _create_workbook(path: str) -> openpyxl.Workbook:
+    _require_openpyxl()
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Job Tracker"
@@ -81,6 +98,7 @@ def _create_workbook(path: str) -> openpyxl.Workbook:
 
 
 def _load_or_create(path: str) -> openpyxl.Workbook:
+    _require_openpyxl()
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.exists():
@@ -90,6 +108,7 @@ def _load_or_create(path: str) -> openpyxl.Workbook:
 
 def load_seen_ids(tracker_path: str) -> set[str]:
     """Return the set of job IDs already in the tracker."""
+    _require_openpyxl()
     p = Path(tracker_path)
     if not p.exists():
         return set()
@@ -112,6 +131,7 @@ def add_job(
     notes: str = "",
 ) -> None:
     """Append a new job row to the tracker."""
+    _require_openpyxl()
     wb = _load_or_create(tracker_path)
     ws = wb.active
 
@@ -162,6 +182,7 @@ def add_job(
 
 def update_status(tracker_path: str, job_id: str, status: str, notes: str = "") -> bool:
     """Update the status (and optionally notes) for an existing job row."""
+    _require_openpyxl()
     if not Path(tracker_path).exists():
         return False
 

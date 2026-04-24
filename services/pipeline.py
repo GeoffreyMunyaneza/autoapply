@@ -3,7 +3,7 @@ services/pipeline.py — Full pipeline orchestration.
 
 Extracted from main.py; all business logic lives here.
 Called by: main.py (CLI), gui/runner.py (GUI background thread),
-           services/scheduler.py (scheduled auto-runs).
+           app.py (desktop app manual runs).
 
 Public API:
     run_pipeline(config, api_key) -> int          # returns new jobs added
@@ -18,8 +18,19 @@ from core.matcher import score_job, passes_filter, select_resume_type
 from core.tailor import tailor_resume
 from core.tracker import load_seen_ids, add_job, COLUMNS
 from core.notifier import notify_new_jobs, notify_pipeline_complete
+from services.config import prepare_config
 
 logger = logging.getLogger(__name__)
+
+
+def _is_pending_resume(resume_path: str, pending_folder: str) -> bool:
+    """Return True when the tailored resume was routed to the pending-review folder."""
+    if not resume_path or not pending_folder:
+        return False
+    try:
+        return Path(resume_path).resolve().is_relative_to(Path(pending_folder).resolve())
+    except Exception:
+        return False
 
 
 def run_pipeline(config: dict, api_key: str) -> int:
@@ -27,6 +38,8 @@ def run_pipeline(config: dict, api_key: str) -> int:
     Full discovery pipeline: scrape → filter → score → tailor → track → notify.
     Returns the number of new jobs added to the tracker.
     """
+    config = prepare_config(config)
+
     logger.info("=" * 60)
     logger.info("AutoApply pipeline starting...")
 
@@ -37,11 +50,14 @@ def run_pipeline(config: dict, api_key: str) -> int:
     claude_cfg   = config.get("claude", {})
     notif_cfg    = config.get("notifications", {})
     cover_cfg    = config.get("cover_letter", {})
+    review_cfg   = config.get("review", {})
     user_profile = config.get("user_profile", {})
 
     tracker_path   = output_cfg["tracker_file"]
     resumes_folder = output_cfg["resumes_folder"]
+    pending_folder = output_cfg.get("pending_folder", "")
     gen_cover      = cover_cfg.get("auto_generate", False)
+    auto_approve   = review_cfg.get("auto_approve", True)
 
     seen_ids = load_seen_ids(tracker_path)
     logger.info(f"Tracker has {len(seen_ids)} existing jobs.")
@@ -111,8 +127,9 @@ def run_pipeline(config: dict, api_key: str) -> int:
                     output_folder=resumes_folder,
                     claude_config=claude_cfg,
                     api_key=api_key,
-                    auto_approve=True,
+                    auto_approve=auto_approve,
                     generate_cover=gen_cover,
+                    pending_folder=pending_folder,
                     user_profile=user_profile,
                 )
                 resume_path = resume_path or ""
@@ -127,13 +144,15 @@ def run_pipeline(config: dict, api_key: str) -> int:
                 except Exception as e:
                     logger.debug(f"  Could not save cover letter: {e}")
 
+            status = "Pending Review" if _is_pending_resume(resume_path, pending_folder) else "Queued"
+
             add_job(
                 tracker_path=tracker_path,
                 job=job,
                 match_score=score,
                 resume_type=resume_type,
                 resume_path=resume_path,
-                status="Queued",
+                status=status,
                 notes=cover_letter[:300] if cover_letter else "",
             )
 
@@ -160,13 +179,15 @@ def run_submission_pass(config: dict, api_key: str = "") -> int:
     Submit all Queued jobs in the tracker.
     Returns the number of jobs successfully submitted.
     """
+    config = prepare_config(config)
+
     submission_cfg = config.get("submission", {})
     if not submission_cfg.get("enabled"):
         logger.info("Submission disabled (submission.enabled=false). Skipping.")
         return 0
 
     try:
-        from core.submitter import submit_application
+        from core.submitter import submit_application, _load_yaml_answers
         import openpyxl
     except ImportError as e:
         logger.error(f"Submission requires Playwright: {e}")
@@ -175,6 +196,12 @@ def run_submission_pass(config: dict, api_key: str = "") -> int:
     output_cfg   = config["output"]
     tracker_path = output_cfg["tracker_file"]
     profile_cfg  = submission_cfg.get("profile", {})
+    questions_file = config.get("screening", {}).get("questions_file", "questions.yaml")
+
+    try:
+        _load_yaml_answers(questions_file)
+    except Exception as exc:
+        logger.debug(f"Could not preload screening answers from {questions_file}: {exc}")
 
     if not Path(tracker_path).exists():
         logger.info("Tracker not found — nothing to submit.")

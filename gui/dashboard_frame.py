@@ -215,6 +215,10 @@ class DashboardFrame(ctk.CTkFrame):
         _update_stats(rows, self._cards)
         _populate_recent(rows, self._tree)
 
+    def set_tracker_path(self, tracker_path: str) -> None:
+        self._tracker_path = tracker_path
+        self.refresh()
+
     def set_running(self, running: bool) -> None:
         self._running = running
         if running:

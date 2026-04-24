@@ -1,84 +1,97 @@
 """
-app.py — AutoApply Windows Desktop App entry point.
-
-Starts:
-  1. APScheduler   — background automation (cron-driven pipeline + auto-submit)
-  2. System tray   — pystray icon, right-click menu
-  3. Main window   — CustomTkinter dashboard (hidden in tray by default)
+Desktop entry point for the AutoApply GUI.
 
 Launch modes:
-  python app.py                 → start in tray (window hidden)
-  python app.py --show          → start with window visible
-  python app.py --run           → start + immediately trigger one pipeline run
-  python app.py --run --submit  → start + pipeline + auto-submit
-
-Headless CLI (no GUI):
-  python main.py                → run pipeline once
-  python main.py --submit       → run pipeline + submit
+  python app.py                 -> start in tray with the window hidden
+  python app.py --show          -> start with the window visible
+  python app.py --run           -> start and trigger one pipeline run
+  python app.py --run --submit  -> start and trigger run + submit
 """
 
 import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 from dotenv import load_dotenv
 
-# ── Logging ────────────────────────────────────────────────────────────────────
-Path("output").mkdir(exist_ok=True)
+from services.config import load_runtime_config, resolve_runtime_path
+
+LOG_PATH = resolve_runtime_path("output/autoapply.log", for_write=True)
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
-        logging.FileHandler("output/autoapply.log", encoding="utf-8"),
+        logging.FileHandler(LOG_PATH, encoding="utf-8"),
         logging.StreamHandler(sys.stdout),
     ],
 )
-for _noisy in ("httpx", "httpcore", "sentence_transformers", "transformers",
-               "huggingface_hub", "filelock", "urllib3", "apscheduler"):
-    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+for noisy_logger in (
+    "httpx",
+    "httpcore",
+    "sentence_transformers",
+    "transformers",
+    "huggingface_hub",
+    "filelock",
+    "urllib3",
+):
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    load_dotenv()
+    load_dotenv(dotenv_path=resolve_runtime_path(".env"))
 
     parser = argparse.ArgumentParser(description="AutoApply Desktop")
-    parser.add_argument("--show",   action="store_true", help="Show window on launch")
-    parser.add_argument("--run",    action="store_true", help="Trigger pipeline immediately")
-    parser.add_argument("--submit", action="store_true", help="Also auto-submit when --run is used")
+    parser.add_argument("--show", action="store_true", help="Show window on launch")
+    parser.add_argument("--run", action="store_true", help="Trigger pipeline immediately")
+    parser.add_argument(
+        "--submit",
+        action="store_true",
+        help="Also auto-submit when --run is used",
+    )
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument(
+        "--install-browsers",
+        action="store_true",
+        help="Install Playwright browser engines and exit",
+    )
     args = parser.parse_args()
 
-    config_path = args.config
-    api_key     = os.environ.get("ANTHROPIC_API_KEY", "")
+    if args.install_browsers:
+        from install_browsers import install_chromium
+
+        success = install_chromium(silent=False)
+        sys.exit(0 if success else 1)
+
+    try:
+        from install_browsers import ensure_chromium
+
+        ensure_chromium(silent=True)
+    except Exception:
+        pass
+
+    config = load_runtime_config(args.config, with_env=True)
+    config_path = str(resolve_runtime_path(args.config, for_write=True))
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
     if not api_key:
         logger.warning(
-            "ANTHROPIC_API_KEY not set — resume tailoring will be skipped. "
-            "Add it to .env: ANTHROPIC_API_KEY=sk-ant-..."
+            "ANTHROPIC_API_KEY not set - resume tailoring will be skipped. "
+            "Add it to .env as ANTHROPIC_API_KEY=..."
         )
 
-    from services.config import load_config, inject_env
-    config = load_config(config_path)
-    inject_env(config)
-
-    # ── Scheduler ──────────────────────────────────────────────────────────────
-    from services.scheduler import AutoApplyScheduler
-
-    # Callbacks are wired to window.after() after window creation (see below)
-    scheduler = AutoApplyScheduler(config_path=config_path)
-
-    # ── Main window ────────────────────────────────────────────────────────────
     from gui.main_window import MainWindow
+    from gui.tray import TrayApp
 
-    tray_holder: list = []   # mutable ref for on_quit closure
+    tray_holder: list[TrayApp] = []
 
     def on_quit() -> None:
-        scheduler.stop()
         if tray_holder:
             tray_holder[0].stop()
 
@@ -86,16 +99,8 @@ def main() -> None:
         config=config,
         api_key=api_key,
         config_path=config_path,
-        scheduler=scheduler,
         on_quit=on_quit,
     )
-
-    # Wire scheduler callbacks → window.after() (thread-safe bridge)
-    scheduler._on_run_start = lambda: window.after(0, window.on_scheduled_run_start)
-    scheduler._on_run_done  = lambda n, e: window.after(0, lambda: window._on_pipeline_done(n, e))
-
-    # ── Tray ───────────────────────────────────────────────────────────────────
-    from gui.tray import TrayApp
 
     tray = TrayApp(
         on_show=lambda: window.after(0, window.toggle),
@@ -106,18 +111,13 @@ def main() -> None:
     tray.start()
     tray_holder.append(tray)
 
-    # ── Start scheduler (background thread) ────────────────────────────────────
-    scheduler.start()
-
-    # ── Show / hide window ─────────────────────────────────────────────────────
     if args.show:
         window.show()
     else:
-        window.withdraw()   # live in tray by default
+        window.withdraw()
 
-    # ── Optional immediate run ─────────────────────────────────────────────────
     if args.run:
-        window.after(800, lambda: scheduler.trigger_now(auto_submit=args.submit))
+        window.after(800, window._run_pipeline_and_submit if args.submit else window._run_pipeline)
 
     logger.info("AutoApply Desktop started. Right-click tray icon to interact.")
     window.mainloop()
